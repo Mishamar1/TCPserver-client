@@ -7,53 +7,90 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-const int PORT = 8080;
-const char *SERVER_IP = "127.0.0.1";
+// клиент
 
-int main() {
-  int sock = socket(AF_INET, SOCK_STREAM, 0);
-  if (sock == -1) {
-    std::cerr << "Ошибка создания сокета\n";
-    return 1;
-  }
+struct Command {
+  int massage{-1};
+};
 
-  // 2. настройка адреса сервера
-  sockaddr_in server_addr{};
-  server_addr.sin_family = AF_INET;
-  server_addr.sin_port = htons(PORT);
-  inet_pton(AF_INET, SERVER_IP, &server_addr.sin_addr);
+Command client;
 
-  if (connect(sock, (sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-    std::cerr << "Ошибка подключения к серверу\n";
-    return 1;
-  }
+class Client {
+private:
+  int clientSock;
 
-  std::cout << "Подключен к серверу. Вводите сообщения (exit для выхода):\n";
+public:
+  Client() : clientSock(-1) {}
 
-  while (true) {
-    std::cout << "> ";
-    std::string message;
-    std::getline(std::cin, message);
+  ~Client() { close(this->clientSock); }
 
-    // Отправляем
-    send(sock, message.c_str(), message.length(), 0);
-
-    if (message == "exit") {
-      std::cout << "Отключаемся...\n";
-      break;
+  void StartClient(short port) {
+    this->clientSock = socket(AF_INET, SOCK_STREAM, 0);
+    if (this->clientSock < 0) {
+      std::cerr << "Ошибка создания сокета клиента " << strerror(errno);
+      exit(1);
     }
 
-    // Получаем ответ
-    char buffer[1024] = {0};
-    int bytes_read = read(sock, buffer, sizeof(buffer) - 1);
-    if (bytes_read <= 0) {
-      std::cout << "Сервер закрыл соединение\n";
-      break;
+    std::cout << "Сокет клиента успешно создан." << std::endl;
+
+    struct sockaddr_in clientAddress{};
+    clientAddress.sin_family = AF_INET;
+    clientAddress.sin_port = htons(port);
+    if (inet_pton(AF_INET, "127.0.0.1", &clientAddress.sin_addr.s_addr) < 0) {
+      std::cerr << "Указа неверный IP адрес. " << strerror(errno);
+      exit(1);
     }
-    buffer[bytes_read] = '\0';
-    std::cout << buffer << "\n";
+
+    socklen_t socklen = sizeof(clientAddress);
+    if (connect(this->clientSock, (struct sockaddr *)&clientAddress, socklen) <
+        0) {
+      std::cerr << "Ошибка подключения к серверу " << strerror(errno);
+      exit(1);
+    }
+
+    std::cout << "Успешное подключение к серверу." << std::endl;
+  }
+  void send_command() {
+    std::cout << "Введите конанду\n";
+    while (true) {
+      std::cout << "> ";
+      std::cin >> client.massage;
+      if (send(this->clientSock, &client.massage, sizeof(client.massage), 0) <
+          0) {
+        std::cerr << "Ошибка. Данные не были отправлены" << strerror(errno);
+        exit(1);
+      }
+
+      std::cout << "Данные отправлены успешно." << std::endl;
+      if (recv_command() == 0) {
+        break;
+      }
+    }
   }
 
-  close(sock);
+  int recv_command() {
+    std::cout << "Получение ответа от сервера" << std::endl;
+    int bite_size =
+        recv(this->clientSock, &client.massage, sizeof(client.massage), 0);
+    std::cout << "Получена команда от сервера: " << client.massage << std::endl;
+
+    if (bite_size == 0) {
+      std::cout << "Сервер штатно закрыл соединение" << std::endl;
+      return 0;
+    } else if (bite_size == -1) {
+      std::cerr << "Возникла ошибка при принятии данных от сервера"
+                << strerror(errno);
+      exit(1);
+    }
+    return 1;
+  }
+};
+
+int main(int argc, char *argv[]) {
+  Client client;
+
+  client.StartClient(std::stoi(argv[1]));
+  client.send_command();
+
   return 0;
 }

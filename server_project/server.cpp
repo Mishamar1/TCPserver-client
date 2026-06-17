@@ -8,59 +8,115 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-const int PORT = 8080;
+// сервер
 
-int main() {
-  // сокет
-  int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (server_fd == -1) {
-    std::cerr << "Ошибка создания сокета\n";
-    return 1;
+struct Command {
+  int commandType = 1;
+};
+
+Command command;
+
+class Server {
+private:
+  int serverSock;
+  int clientSock;
+
+public:
+  Server() : serverSock(-1), clientSock(-1) {}
+  ~Server() {}
+
+  void StartServer() {
+    this->serverSock = socket(AF_INET, SOCK_STREAM, 0);
+    if (this->serverSock < 0) {
+      std::cerr << "Ошибка создания сокета\n";
+      exit(1);
+    }
+
+    struct sockaddr_in serverAddress{};
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_port = htons(8080);
+    // serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (inet_pton(AF_INET, "127.0.0.1", &serverAddress.sin_addr.s_addr) < 0) {
+      std::cerr << "Указан неверный IP адрес. " << strerror(errno);
+      exit(1);
+    }
+
+    if (bind(this->serverSock, (struct sockaddr *)&serverAddress,
+             sizeof(serverAddress)) < 0) {
+      std::cerr << "Ошибка привязки сокета к адресу и порту. "
+                << strerror(errno);
+      exit(1);
+    }
+
+    std::cout << "Сервер запущен." << std::endl;
+
+    if (listen(this->serverSock, 1) < 0) {
+      std::cerr << "Ошибка запуска прослушивания входящих соединений. "
+                << strerror(errno);
+      exit(1);
+    }
+
+    std::cout << "Ожидание подключения клиента к порту: "
+              << ntohs(serverAddress.sin_port) << std::endl;
+
+    struct sockaddr_in clientAddress{};
+    socklen_t clientAddressLen = sizeof(clientAddress);
+
+    this->clientSock = accept(
+        this->serverSock, (struct sockaddr *)&clientAddress, &clientAddressLen);
+    if (this->clientSock < 0) {
+      std::cerr << "Ошибка при принятии входящего соединения. "
+                << strerror(errno);
+      exit(1);
+    }
+
+    std::cout << "Клиет успешно подключен!" << std::endl;
   }
 
-  int opt = 1;
-  setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt,
-             sizeof(opt)); // разрешение на переиспользование порта
-
-  // Привязка порта
-  sockaddr_in address{};
-  address.sin_family = AF_INET;
-  address.sin_addr.s_addr = INADDR_ANY;
-  address.sin_port = htons(PORT);
-
-  if (bind(server_fd, (sockaddr *)&address, sizeof(address)) < 0) {
-    std::cerr << "Ошибка bind\n";
-    return 1;
+  void send_command() {
+    if (send(this->clientSock, &command.commandType,
+             sizeof(command.commandType), 0) < 0) {
+      std::cerr << "Ошибка при отправке данных клиенту. " << strerror(errno);
+      exit(1);
+    }
+    std::cout << "Данные успешно отправлены клиенту!" << std::endl;
   }
 
-  // Начинаем слушать
-  if (listen(server_fd, 1) < 0) { // 1 - максимум в очереди
-    std::cerr << "Ошибка listen\n";
-    return 1;
+  void recv_command() {
+    if (recv(this->clientSock, &command.commandType,
+             sizeof(command.commandType), 0) < 0) {
+      std::cerr
+          << "Ошибка при прочтении данных от клиента. Данные не прочитаны... "
+          << strerror(errno);
+      exit(1);
+    }
+
+    std::cout << "Данные успешно прочитаны!\nПоступила команда: "
+              << command.commandType << std::endl;
   }
 
-  std::cout << "Сервер запущен на порту " << PORT << ", ждем клиента...\n";
+  void close_command() {
+    shutdown(this->serverSock, 2);
+    shutdown(this->clientSock, 2);
 
-  // подключение
-  int client_fd = accept(server_fd, nullptr, nullptr);
-  if (client_fd < 0) {
-    std::cerr << "Ошибка accept\n";
-    return 1;
+    if (this->serverSock != -1) {
+      close(this->serverSock);
+      this->serverSock = -1;
+    }
+    if (this->clientSock != -1) {
+      close(this->clientSock);
+      this->clientSock = -1;
+    }
   }
+};
 
-  std::cout << "Клиент подключился!\n";
+int main(int argc, char *argv[]) {
+  Server server;
+  server.StartServer();
+  server.recv_command();
+  // server.send_command();
 
-  // чтение сообщения
-  char buffer[1024] = {0};
-  int bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
-
-  if (bytes_read > 0) {
-    buffer[bytes_read] = '\0';
-    std::cout << "Получено от клиента: " << buffer << "\n";
-  }
-
-  close(client_fd);
-  close(server_fd);
+  server.close_command();
 
   return 0;
 }
