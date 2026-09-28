@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <stdio.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -10,7 +11,8 @@
 // клиент
 
 struct Command {
-    int massage{-1};
+    std::string massage{};
+    Command() : massage(1024, '\0') {}
 };
 
 Command client;
@@ -25,7 +27,7 @@ class Client {
     ~Client() { close(this->clientSock); }
 
     void StartClient(short port) {
-        this->clientSock = socket(AF_INET, SOCK_STREAM, 0);
+        this->clientSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (this->clientSock < 0) {
             std::cerr << "Ошибка создания сокета клиента " << strerror(errno);
             exit(1);
@@ -37,7 +39,7 @@ class Client {
         clientAddress.sin_family = AF_INET;
         clientAddress.sin_port = htons(port);
         if (inet_pton(AF_INET, "127.0.0.1", &clientAddress.sin_addr.s_addr) < 0) {
-            std::cerr << "Указа неверный IP адрес. " << strerror(errno);
+            std::cerr << "Указан неверный IP адрес. " << strerror(errno);
             exit(1);
         }
 
@@ -57,13 +59,14 @@ class Client {
             std::getline(std::cin, input);
 
             try {
-                client.massage = std::stoi(input);
+                client.massage = input;
+                client.massage.resize(client.massage.size());
             } catch (const std::exception& e) {
                 std::cout << "Ошибка! Введите целое число.\n";
                 continue;
             }
 
-            if (send(this->clientSock, &client.massage, sizeof(client.massage), 0) < 0) {
+            if (send(this->clientSock, client.massage.c_str(), client.massage.size(), 0) < 0) {
                 std::cerr << "Ошибка. Данные не были отправлены" << strerror(errno);
                 exit(1);
             }
@@ -76,8 +79,11 @@ class Client {
     }
 
     int recv_command() {
+        client.massage.resize(1024, '\0');
         std::cout << "Получение ответа от сервера" << std::endl;
-        int bite_size = recv(this->clientSock, &client.massage, sizeof(client.massage), 0);
+        int bite_size = recv(this->clientSock, client.massage.data(), client.massage.size(), 0);
+        client.massage.resize(bite_size);
+
         std::cout << "Получена команда от сервера: " << client.massage << std::endl;
 
         if (bite_size == 0) {

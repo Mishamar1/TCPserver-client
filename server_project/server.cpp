@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <cstring>
 #include <iostream>
 #include <mutex>
@@ -10,10 +11,13 @@
 #include <thread>
 #include <vector>
 
+#include "../libs/pars_http.h"
+
 // сервер
 
 struct Command {
-    int commandType{-1};
+    std::string commandType{};
+    Command() : commandType(65536, '\0') {}
 };
 
 std::mutex mtx_client;
@@ -26,41 +30,68 @@ void handle_client(int client_fd) {
     }
 
     Command command;
+
     while (true) {
-        int bytes = recv(client_fd, &command.commandType, sizeof(command.commandType), 0);
+        char buf[1024];
+        int bytes = recv(client_fd, buf, 1024 - 1, 0);
+        buf[bytes] = '\0';
+        std::string mini_data(buf, bytes);
 
-        if (bytes <= 0) {
-            {
-                std::lock_guard<std::mutex> lockend(mtx_client);
-                if (bytes == 0) {
-                    std::cout << "Клиент штатно закрыл соединение. (Поток: " << std::this_thread::get_id()
-                              << ")" << std::endl;
-                } else {
-                    std::cout << "Ошибка при прочтении данных от клиента. Данные не прочитаны. (Поток: "
-                              << std::this_thread::get_id() << ") " << strerror(errno);
-                }
+        if (bytes > 0) {
+            command.commandType += mini_data;
+        } else {
+            std::lock_guard<std::mutex> lockend(mtx_client);
+            if (bytes == 0) {
+                std::cout << "Клиент штатно закрыл соединение. (Поток: " << std::this_thread::get_id() << ")"
+                          << std::endl;
+            } else {
+                std::cout << "Ошибка при прочтении данных от клиента. Данные не прочитаны. (Поток: "
+                          << std::this_thread::get_id() << ") " << strerror(errno);
             }
+
             break;
         }
-        {
-            std::lock_guard<std::mutex> lockend(mtx_client);
-            std::cout << "Данные успешно прочитаны!\nПоступила команда: " << command.commandType << "\n";
-        }
-
-        if (send(client_fd, &command.commandType, sizeof(command.commandType), 0) < 0) {
-            {
-                std::lock_guard<std::mutex> lockend(mtx_client);
-                std::cout << "Ошибка отправки данных клиенту. (Поток: " << std::this_thread::get_id() << ") "
-                          << strerror(errno);
-            }
-            break;
-        }
-        {
-            std::lock_guard<std::mutex> lockend(mtx_client);
-            std::cout << "Данные успешно отправлены клиенту! Команда: " << command.commandType
-                      << " (Поток: " << std::this_thread::get_id() << ")\n";
-        }
+        // if (buf.rfind("\r\n\r\n") != std::string::npos) {
+        //     std::lock_guard<std::mutex> lockend(mtx_client);
+        //     std::cout << "> Данные успешно прочитаны!\nПоступило сообщение:\n" << command.commandType <<
+        //     "\n"; break;
+        // }
     }
+
+    {
+        std::lock_guard<std::mutex> lokend1(mtx_client);
+        std::cout << "> Данные успешно прочитаны!\nПоступило сообщение:\n" << command.commandType << "\n";
+        std::cout << "Поток: " << std::this_thread::get_id() << "\n";
+    }
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
+    //*************************************************************************************************//
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
+    // ****************************** РАБОТА С ПОЛУЧЕННЫМИ ДАННЫМИ ************************************//
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
+    //*************************************************************************************************//
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // if (send(client_fd, command.commandType.c_str(), command.commandType.size(), 0) < 0) {
+    //     {
+    //         std::lock_guard<std::mutex> lockend(mtx_client);
+    //         std::cout << "Ошибка отправки данных клиенту. (Поток: " << std::this_thread::get_id() << ")
+    //         "
+    //                   << strerror(errno);
+    //     }
+    // }
+    // {
+    //     std::lock_guard<std::mutex> lockend(mtx_client);
+    //     std::cout << "Данные успешно отправлены клиенту! Команда: " << command.commandType
+    //               << " (Поток: " << std::this_thread::get_id() << ")\n";
+    // }
+
+    // parse_http(command.commandType, command.commandType.length());
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
+    // *************************** КОНЕЦ РАБОТЫ С ПОЛУЧЕННЫМИ ДАННЫМИ *********************************//
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
+
     close(client_fd);
     {
         std::lock_guard<std::mutex> lockend(mtx_client);
@@ -81,7 +112,7 @@ class Server {
     }
 
     void StartServer() {
-        this->serverSock = socket(AF_INET, SOCK_STREAM, 0);
+        this->serverSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (this->serverSock < 0) {
             std::cerr << "Ошибка создания сокета\n";
             exit(1);
