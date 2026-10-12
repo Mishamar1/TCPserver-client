@@ -13,11 +13,13 @@
 
 #include "../libs/pars_http.h"
 
+using namespace HTTP21;
+
 // сервер
 
 struct Command {
     std::string commandType{};
-    Command() : commandType(65536, '\0') {}
+    Command() { commandType.reserve(65536); }
 };
 
 std::mutex mtx_client;
@@ -34,10 +36,10 @@ void handle_client(int client_fd) {
     while (true) {
         char buf[1024];
         int bytes = recv(client_fd, buf, 1024 - 1, 0);
-        buf[bytes] = '\0';
-        std::string mini_data(buf, bytes);
 
         if (bytes > 0) {
+            buf[bytes] = '\0';
+            std::string mini_data(buf, bytes);
             command.commandType += mini_data;
         } else {
             std::lock_guard<std::mutex> lockend(mtx_client);
@@ -51,12 +53,13 @@ void handle_client(int client_fd) {
 
             break;
         }
-        // if (buf.rfind("\r\n\r\n") != std::string::npos) {
-        //     std::lock_guard<std::mutex> lockend(mtx_client);
-        //     std::cout << "> Данные успешно прочитаны!\nПоступило сообщение:\n" << command.commandType <<
-        //     "\n"; break;
-        // }
+        if (command.commandType.rfind("\r\n\r\n") != std::string::npos) {
+            std::lock_guard<std::mutex> lockend(mtx_client);
+            std::cout << "> Данные успешно прочитаны!\nПоступило сообщение:\n" << command.commandType << "\n";
+            break;
+        }
     }
+    command.commandType.shrink_to_fit();
 
     {
         std::lock_guard<std::mutex> lokend1(mtx_client);
@@ -86,7 +89,17 @@ void handle_client(int client_fd) {
     //               << " (Поток: " << std::this_thread::get_id() << ")\n";
     // }
 
-    // parse_http(command.commandType, command.commandType.length());
+    HTTPrequest pars_result = parse_http(command.commandType, ':');
+
+    std::cout << "Грязные данные обработаны и структурированы\nВывожу на экран чистые данные..." << std::endl;
+
+    std::cout << "Method: " << pars_result.metod << '\n';
+    std::cout << "Url: " << pars_result.url << '\n';
+    std::cout << "Version: " << pars_result.version << '\n';
+
+    for (auto [key, value] : pars_result.headers) {
+        std::cout << key << " ====== " << value << '\n';
+    }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////
     // *************************** КОНЕЦ РАБОТЫ С ПОЛУЧЕННЫМИ ДАННЫМИ *********************************//
@@ -98,6 +111,12 @@ void handle_client(int client_fd) {
         std::cout << "Клиент успешно бработан и закрыт! (Поток: " << std::this_thread::get_id() << ")"
                   << std::endl;
     }
+
+    // std::cout << "Pars result:\n";
+    // for (auto [key, value] : pars_result) {
+    //     std::cout << "> " << key << " :--: " << value << "\n";
+    // }
+    // std::cout << std::endl;
 }
 
 class Server {
