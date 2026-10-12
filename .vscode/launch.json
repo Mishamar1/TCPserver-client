@@ -1,0 +1,90 @@
+// {
+//     "version": "0.2.0",
+//     "configurations": [
+//         {
+//             "name": "C/C++: g++ build and debug active file",
+//             "type": "cppdbg",
+//             "request": "launch",
+//             "program": "${fileDirname}/${fileBasenameNoExtension}",
+//             "args": [],
+//             "stopAtEntry": false,
+//             "cwd": "${fileDirname}",
+//             "environment": [],
+//             "externalConsole": false,
+//             "MIMode": "gdb",
+//             "setupCommands": [
+//                 {
+//                     "description": "Enable pretty-printing for gdb",
+//                     "text": "-enable-pretty-printing",
+//                     "ignoreFailures": true
+//                 },
+//                 {
+//                     "description": "Set Disassembly Flavor to Intel",
+//                     "text": "-gdb-set disassembly-flavor intel",
+//                     "ignoreFailures": true
+//                 }
+//             ],
+//             "preLaunchTask": "C/C++: g++ build active file",
+//             "miDebuggerPath": "/usr/bin/gdb"
+//         }
+//     ]
+// }
+
+
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Server",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/server_project/server_gdb",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/server_project",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "build server",
+            "miDebuggerPath": "/usr/bin/gdb"
+        },
+        {
+            "name": "Debug Client",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/client_project/client_gdb",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/client_project",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "build client",
+            "miDebuggerPath": "/usr/bin/gdb"
+        }
+    ]
+}
